@@ -1,0 +1,141 @@
+---
+title: "ADA Final Project EDA"
+subtitle: "Airbnb in the city of New York"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---
+class: inverse
+background-image: url(https://upload.wikimedia.org/wikipedia/commons/6/69/Airbnb_Logo_B%C3%A9lo.svg)
+
+```{r setup, include=FALSE}
+# setup
+knitr::opts_chunk$set(
+  # cache = TRUE, 
+  # cache.lazy = FALSE, 
+  echo = F
+  , comment=""
+  , warning = FALSE
+  , message = FALSE
+  , tidy.opts=list(width.cutoff=55)
+  , tidy = TRUE
+  )
+
+# rm(list=ls())
+# update.packages(ask = FALSE, checkBuilt = TRUE)
+library(DT); library(data.table)
+library(tidyverse)
+library(plotly)
+library(wordcloud2); library(tm); library(jiebaR,jiebaRD) 
+library(leaflet,quietly=TRUE); library(maps,quietly=TRUE)
+library(Hmisc)
+
+options(
+  htmltools.dir.version = FALSE, 
+  dev='cairo_pdf'
+  )
+```
+
+```{r}
+# constants
+price.name <- "price"
+price.group.name <- "price group"
+cuts.price <- seq(0, 1000, 125)
+```
+
+```{r}
+data <- dat <- fread("./Data/MyData.csv")
+dat[, eval(price.group.name) := as.factor(as.character(cut2(x = get(price.name), cuts = cuts.price)))]
+# colnames(dat)
+```
+
+```{r}
+# functions
+split_str <- function(str){
+  s <- str_extract_all(unlist(strsplit(str, ",")), "[:alpha:]+")
+  amenities_i <- unlist(lapply(s, function(i){paste(i, collapse = " ")}))
+  return(amenities_i)
+}
+```
+---
+class: inverse, center, middle
+
+# Data Source
+
+SKDJbv:Sruvbn:SEIgjtkb.nLFIuvb;
+
+---
+class: inverse, center, middle 
+
+# Exploratory Data Analysis
+
+---
+## Wordcloud
+```{r out.width='100%'}
+freq <- table(readRDS("./Data/description.rds"))
+wordcloud2(freq,shape='star')
+# letterCloud(demoFreq,"R")
+# wordcloud2(freq, figPath = "peace.png", size = 1.5, color = "skyblue", backgroundColor="black")
+```
+
+---
+## Sunburst
+```{r out.width='100%'}
+boroughs <- aggregate(data$id,list(data$neighbourhood_group_cleansed),length)
+plot_ly(labels=boroughs[,1], values=boroughs[,2], type = "pie",textinfo = "label+percent"
+           ) %>%
+      layout(title = paste("Proportion By Boroughs"),showlegend = F,
+             xaxis=list(showgrid=F,zeroline=F,showline=F,autotick=T,ticks='',showticklabels=F),
+             yaxis=list(showgrid=F,zeroline=F,showline=F,autotick=T,ticks='',showticklabels=F))
+```
+
+---
+class: center, middle 
+## Map
+```{r  out.width='100%', fig.height=6, eval=require('leaflet')}
+# layered map 
+df_split<- split(dat, dat$neighbourhood_group_cleansed)
+pal <- colorFactor(palette = 'YlOrBr', domain = dat$`price group`)
+pop <- paste0("<strong>Name: </strong>",
+                dat$name, "<br>",
+                "<strong>Neighborhood: </strong>",
+                dat$neighbourhood_cleansed, "<br>",
+                "<strong>Room Type: </strong>",
+                dat$room_type, "</br>",
+                "<strong>Beds: </strong>",
+                dat$beds, "<br>",
+                "<strong>Price: </strong>",
+                dat$price)
+
+l <- dat %>% leaflet() %>%
+  addTiles(urlTemplate = "http://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png")  %>%
+  mapOptions(zoomToLimits="always") %>%
+  addCircles(~longitude, ~latitude, color = ~pal(dat$`price group`), weight = 7, opacity = 0.7,
+             popup = pop) %>%
+  addMarkers(lat=dat$latitude, lng=dat$longitude,
+  clusterOptions = markerClusterOptions(), popup=pop)
+
+names(df_split) %>%
+  purrr::walk(function(df) {
+    l <<- l %>%
+      addMarkers(data=df_split[[df]],
+                          lng=~longitude, lat=~latitude,
+                          label=~as.character(name),
+                          group = df,
+                          clusterOptions = markerClusterOptions(removeOutsideVisibleBounds = F),
+                          labelOptions = labelOptions(noHide = F,
+                                                       direction = 'auto'))
+  })
+l %>%
+  addLayersControl(
+    overlayGroups = names(df_split),
+    options = layersControlOptions(collapsed = FALSE)
+  ) -> map 
+
+map
+```
+
