@@ -136,6 +136,6 @@ l %>%
     options = layersControlOptions(collapsed = FALSE)
   ) -> map 
 
-map
+# map
 ```
 
